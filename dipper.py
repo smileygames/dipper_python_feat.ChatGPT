@@ -18,23 +18,16 @@ class MyDNSUpdater(DDNSUpdater):
         self.ipv4_url = ipv4_url
         self.ipv6_url = ipv6_url
         self.domain = domain
-        self.previous_ip = None
+        self.previous_ipv4 = None
+        self.previous_ipv6 = None
     
-    def update_address(self, ip_address, ipv6_address=None):
+    def update_address(self, ipv4_address=None, ipv6_address=None):
         if ipv6_address:
             url = self.ipv6_url
         else:
             url = self.ipv4_url
         
-        payload = {
-            "username": self.username,
-            "password": self.password,
-            "ip": ip_address,
-            "ipv6": ipv6_address,
-            "domain": self.domain
-        }
-        
-        response = requests.post(url, data=payload)
+        response = requests.get(url, auth=(self.username, self.password))
         
         if response.status_code == 200:
             print("MyDNS address update successful.")
@@ -62,12 +55,19 @@ class GoogleDomainsUpdater(DDNSUpdater):
             print("Failed to update Google Domains address.")
 
 # 自分のIPアドレスを取得する関数
-def get_my_ip():
-    result = subprocess.run(["dig", "@ident.me", "+short"], capture_output=True, text=True)
+def get_my_ip(ip_version):
+    if ip_version == 4:
+        result = subprocess.run(["dig", "@ident.me", "-4", "+short"], capture_output=True, text=True)
+    elif ip_version == 6:
+        result = subprocess.run(["dig", "@ident.me", "-6", "+short"], capture_output=True, text=True)
+    else:
+        raise ValueError("Invalid IP version. Supported values are 4 and 6.")
+
     if result.returncode == 0:
         return result.stdout.strip()
     else:
         raise Exception("Failed to get IP address.")
+
 
 # ドメインのIPアドレスを取得する関数
 def get_domain_ip(domain):
@@ -80,20 +80,26 @@ def get_domain_ip(domain):
 # 定期的なアドレス通知処理
 def update_ddns(mydns, google_domains):
     # 自分のIPアドレスを取得
-    my_ip = get_my_ip()
+#    my_ip = get_my_ip()
+    ipv4_address = get_my_ip(4)
+    ipv6_address = get_my_ip(6)
 
     # ドメインのIPアドレスを取得
     domain_ip = get_domain_ip(mydns.domain)
 
     # IPアドレスが変更された場合のみアドレスを更新
-    if my_ip != domain_ip:
+    if ipv4_address != domain_ip:
         # IPv4アドレスを指定してアドレスを更新
-        mydns.update_address(my_ip)
+        mydns.update_address(ipv4_address)
+
+    if ipv6_address != domain_ip:
+        # IPv4アドレスを指定してアドレスを更新
+        mydns.update_address(ipv4_address, ipv6_address)
 
     # IPアドレスが変更された場合のみアドレスを更新
-    if my_ip != get_domain_ip(google_domains.domain):
+    if ipv4_address != get_domain_ip(google_domains.domain):
         # IPv4アドレスを指定してアドレスを更新
-        google_domains.update_address(my_ip)
+        google_domains.update_address(ipv4_address)
 
 # 設定ファイルを読み込む
 config = configparser.ConfigParser()
