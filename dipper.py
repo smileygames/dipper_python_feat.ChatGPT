@@ -18,10 +18,9 @@ class MyDNSUpdater(DDNSUpdater):
         self.ipv4_url = ipv4_url
         self.ipv6_url = ipv6_url
         self.domain = domain
-        self.previous_ipv4 = None
-        self.previous_ipv6 = None
+        self.previous_ip = None
     
-    def update_address(self, ipv4_address=None, ipv6_address=None):
+    def update_address(self, ipv6_address=None):
         if ipv6_address:
             url = self.ipv6_url
         else:
@@ -55,19 +54,12 @@ class GoogleDomainsUpdater(DDNSUpdater):
             print("Failed to update Google Domains address.")
 
 # 自分のIPアドレスを取得する関数
-def get_my_ip(ip_version):
-    if ip_version == 4:
-        result = subprocess.run(["dig", "@ident.me", "-4", "+short"], capture_output=True, text=True)
-    elif ip_version == 6:
-        result = subprocess.run(["dig", "@ident.me", "-6", "+short"], capture_output=True, text=True)
-    else:
-        raise ValueError("Invalid IP version. Supported values are 4 and 6.")
-
+def get_my_ip():
+    result = subprocess.run(["dig", "@ident.me", "-4", "+short"], capture_output=True, text=True)
     if result.returncode == 0:
         return result.stdout.strip()
     else:
         raise Exception("Failed to get IP address.")
-
 
 # ドメインのIPアドレスを取得する関数
 def get_domain_ip(domain):
@@ -78,61 +70,74 @@ def get_domain_ip(domain):
         raise Exception("Failed to get domain IP address.")
 
 # 定期的なアドレス通知処理
-def update_ddns(mydns, google_domains):
+def update_ddns(domain_user):
     # 自分のIPアドレスを取得
-#    my_ip = get_my_ip()
-    ipv4_address = get_my_ip(4)
-    ipv6_address = get_my_ip(6)
+    my_ip = get_my_ip()
 
+    # MyDNSのアップデート
+    domain_user.update_address(my_ip)
+
+
+# 定期的なチェック処理
+def check_ddns(domains_user):
     # ドメインのIPアドレスを取得
-    domain_ip = get_domain_ip(mydns.domain)
+    mydns_domain_ip = get_domain_ip(domains_user.domain)
 
-    # IPアドレスが変更された場合のみアドレスを更新
-    if ipv4_address != domain_ip:
-        # IPv4アドレスを指定してアドレスを更新
-        mydns.update_address(ipv4_address)
+    # IPアドレスが変更された場合にアドレスを更新
+    my_ip = get_my_ip()
+    if my_ip != mydns_domain_ip:
+        domains_user.update_address()
 
-    if ipv6_address != domain_ip:
-        # IPv4アドレスを指定してアドレスを更新
-        mydns.update_address(ipv4_address, ipv6_address)
+# メイン処理
+def main():
+    # コンフィグファイルの読み込み
+    config = configparser.ConfigParser()
+    config.read('config.ini')
 
-    # IPアドレスが変更された場合のみアドレスを更新
-    if ipv4_address != get_domain_ip(google_domains.domain):
-        # IPv4アドレスを指定してアドレスを更新
-        google_domains.update_address(ipv4_address)
+    # MyDNSの設定を取得
+    mydns_users = []
+    for section in config.sections():
+        if section.startswith('MyDNS_user'):
+            username = config.get(section, 'username')
+            password = config.get(section, 'password')
+            ipv4_url = config.get(section, 'ipv4_url')
+            ipv6_url = config.get(section, 'ipv6_url')
+            domain = config.get(section, 'domain')
+            mydns = MyDNSUpdater(username, password, ipv4_url, ipv6_url, domain)
+            mydns_users.append(mydns)
+    
+    # Google Domainsの設定を取得
+    google_domains_users = []
+    for section in config.sections():
+        if section.startswith('GoogleDomains_user'):
+            username = config.get(section, 'username')
+            password = config.get(section, 'password')
+            url = config.get(section, 'url')
+            domain = config.get(section, 'domain')
+            google_domains = GoogleDomainsUpdater(username, password, url, domain)
+            google_domains_users.append(google_domains)
 
-# 設定ファイルを読み込む
-config = configparser.ConfigParser()
-config.read('config.ini')
+    # アドレス通知処理のスケジュール設定
+    notification_interval = int(config.get('Schedule', 'notification_interval_hours'))
+    for mydns_user in mydns_users:
+        schedule.every(notification_interval).seconds.do(update_ddns, mydns_user)
 
-# MyDNSの設定を取得
-mydns_ipv4_url = config.get('MyDNS', 'ipv4_url')
-mydns_ipv6_url = config.get('MyDNS', 'ipv6_url')
-mydns_domain = config.get('MyDNS', 'domain')
-mydns_username = config.get('MyDNS', 'username')
-mydns_password = config.get('MyDNS', 'password')
+    # 各Google Domainsのユーザーに対して処理を実行
+    for google_domains_user in google_domains_users:
+        schedule.every(notification_interval).seconds.do(update_ddns, google_domains_user)
 
-# Google Domainsの設定を取得
-google_domains_url = config.get('GoogleDomains', 'url')
-google_domains_domain = config.get('GoogleDomains', 'domain')
-google_domains_username = config.get('GoogleDomains', 'username')
-google_domains_password = config.get('GoogleDomains', 'password')
+    # アドレスチェック処理のスケジュール設定
+    check_interval = int(config.get('Schedule', 'check_interval_minutes'))
+    for mydns_user in mydns_users:
+        schedule.every(check_interval).seconds.do(check_ddns, mydns_user)
 
-# MyDNSUpdaterのインスタンスを作成
-mydns = MyDNSUpdater(mydns_username, mydns_password, mydns_ipv4_url, mydns_ipv6_url, mydns_domain)
+    # 各Google Domainsのユーザーに対して処理を実行
+    for google_domains_user in google_domains_users:
+        schedule.every(check_interval).seconds.do(check_ddns, google_domains_user)
 
-# GoogleDomainsUpdaterのインスタンスを作成
-google_domains = GoogleDomainsUpdater(google_domains_username, google_domains_password, google_domains_url, google_domains_domain)
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
-# 初回のアドレス通知処理を実行
-update_ddns(mydns, google_domains)
-
-# コンフィグから通知間隔を取得
-interval_hours = int(config.get('Schedule', 'interval_hours'))
-
-# 指定された時間間隔でアドレス通知処理をスケジュール
-schedule.every(interval_hours).hours.do(update_ddns, mydns, google_domains)
-
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+if __name__ == "__main__":
+    main()
