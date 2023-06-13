@@ -1,0 +1,11 @@
+[Unit]
+Description=DDNS Updater
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /path/to/ddns_updater.py
+WorkingDirectory=/path/to/
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
