@@ -1,0 +1,2 @@
+# dipper_python_feat.ChatGPT
+ChatGPTでオブジェクト指向で実装してみる事で、勉強する用
