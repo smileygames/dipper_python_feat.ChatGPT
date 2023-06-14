@@ -1,2 +1,60 @@
 # dipper_python_feat.ChatGPT
 ChatGPTでオブジェクト指向で実装してみる事で、勉強する用
+
+クラス図も書いてくれた！
+
+```python
++------------------------------------+
+|            DDNSUpdater             |
++------------------------------------+
+| - username: str                    |
+| - password: str                    |
+| - domain: str                      |
+| - use_ipv4: bool                   |
+| - use_ipv6: bool                   |
++------------------------------------+
+| + update_address(ipv4_address=None, |
+|     ipv6_address=None)              |
++------------------------------------+
+                ^
+                |
+        +-----------------+
+        |                 |
++----------------+  +----------------------+
+| MyDNSUpdater   |  | GoogleDomainsUpdater |
++----------------+  +----------------------+
+| - ipv4_url: str |  | - url: str           |
+| - ipv6_url: str |  +----------------------+
++----------------+  | + update_address(ipv4_address=None, |
+                    |     ipv6_address=None)              |
+                    +------------------------------------+
+                                ^
+                                |
+               +-----------------------------------+
+               |                                   |
+      +-----------------+                 +--------------------+
+      | DDNSManager     |                 | DDNSConfigLoader    |
+      +-----------------+                 +--------------------+
+      | - mappings: dict[str, DDNSUpdater] |                    |
+      +-----------------+                 +--------------------+
+      | + add_ddns_user(user: DDNSUpdater) | + load_config(filename: str): DDNSManager |
+      | + update_ddns_address(domain: str) |                                    |
+      | + check_ddns_address(domain: str)  |                                    |
+      | + get_my_ip(ipv6: bool = False): str|                                   |
+      | + get_domain_ip(domain: str, ipv6: bool = False): str |              |
+      +-----------------+                 +--------------------+
+                            ^
+                            |
+             +-----------------------+
+             |                       |
+    +-------------------+    +-------------------+
+    | DDNSUpdaterThread |    | DDNSCheckerThread |
+    +-------------------+    +-------------------+
+    | - ddns_manager: DDNSManager | - ddns_manager: DDNSManager |
+    | - interval_time: int        | - interval_time: int        |
+    | - use_ipv4: bool            | - use_ipv4: bool            |
+    | - use_ipv6: bool            | - use_ipv6: bool            |
+    +-------------------+    +-------------------+
+    | + run()            |    | + run()            |
+    +-------------------+    +-------------------+
+```
