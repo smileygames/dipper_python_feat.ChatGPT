@@ -3,24 +3,25 @@ import configparser
 import subprocess
 import schedule
 import time
+import threading
 
 class DDNSUpdater:
-    def __init__(self, username, password):
+    def __init__(self, username, password, domain):
         self.username = username
         self.password = password
+        self.domain = domain
     
     def update_address(self, ip_address):
         raise NotImplementedError("Subclasses must implement update_address method.")
 
 class MyDNSUpdater(DDNSUpdater):
     def __init__(self, username, password, ipv4_url, ipv6_url, domain):
-        super().__init__(username, password)
+        super().__init__(username, password, domain)
         self.ipv4_url = ipv4_url
         self.ipv6_url = ipv6_url
-        self.domain = domain
         self.previous_ip = None
     
-    def update_address(self, ipv6_address=None):
+    def update_address(self, ipv4_address=None, ipv6_address=None):
         if ipv6_address:
             url = self.ipv6_url
         else:
@@ -35,9 +36,8 @@ class MyDNSUpdater(DDNSUpdater):
 
 class GoogleDomainsUpdater(DDNSUpdater):
     def __init__(self, username, password, url, domain):
-        super().__init__(username, password)
+        super().__init__(username, password, domain)
         self.url = url
-        self.domain = domain
         self.previous_ip = None
     
     def update_address(self, ip_address):
@@ -63,7 +63,7 @@ def get_my_ip():
 
 # ドメインのIPアドレスを取得する関数
 def get_domain_ip(domain):
-    result = subprocess.run(["dig", domain, "+short"], capture_output=True, text=True)
+    result = subprocess.run(["dig", domain, "-4", "+short"], capture_output=True, text=True)
     if result.returncode == 0:
         return result.stdout.strip()
     else:
@@ -77,7 +77,6 @@ def update_ddns(domain_user):
     # MyDNSのアップデート
     domain_user.update_address(my_ip)
 
-
 # 定期的なチェック処理
 def check_ddns(domains_user):
     # ドメインのIPアドレスを取得
@@ -86,7 +85,23 @@ def check_ddns(domains_user):
     # IPアドレスが変更された場合にアドレスを更新
     my_ip = get_my_ip()
     if my_ip != mydns_domain_ip:
-        domains_user.update_address()
+        domains_user.update_address(my_ip)
+
+# 別スレッド非同期タイマー処理
+def timer_update(interval_time, mydns_users, google_domains_users):
+    while True:
+        for mydns_user in mydns_users:
+            update_ddns(mydns_user)
+        time.sleep(interval_time)
+
+def timer_check(interval_time, mydns_users, google_domains_users):
+    while True:
+        for mydns_user in mydns_users:
+            check_ddns(mydns_user)
+        for google_domains_user in google_domains_users:
+            check_ddns(google_domains_user)
+
+        time.sleep(interval_time)
 
 # メイン処理
 def main():
@@ -117,26 +132,22 @@ def main():
             google_domains = GoogleDomainsUpdater(username, password, url, domain)
             google_domains_users.append(google_domains)
 
-    # アドレス通知処理のスケジュール設定
-    notification_interval = int(config.get('Schedule', 'notification_interval_hours'))
-    for mydns_user in mydns_users:
-        schedule.every(notification_interval).seconds.do(update_ddns, mydns_user)
+    # アドレス通知処理の非同期実行
+    notification_interval = int(config.get('Schedule', 'notification_interval_sec'))
+    notification_threads = []
+    thread = threading.Thread(target=timer_update, args=(notification_interval, mydns_users, google_domains_users,))
+    thread.start()
+    notification_threads.append(thread)
 
-    # 各Google Domainsのユーザーに対して処理を実行
-    for google_domains_user in google_domains_users:
-        schedule.every(notification_interval).seconds.do(update_ddns, google_domains_user)
+    # アドレスチェック処理の非同期実行
+    check_interval = int(config.get('Schedule', 'check_interval_sec'))
+    check_threads = []
+    thread = threading.Thread(target=timer_check, args=(check_interval, mydns_users, google_domains_users,))
+    thread.start()
+    check_threads.append(thread)
 
-    # アドレスチェック処理のスケジュール設定
-    check_interval = int(config.get('Schedule', 'check_interval_minutes'))
-    for mydns_user in mydns_users:
-        schedule.every(check_interval).seconds.do(check_ddns, mydns_user)
-
-    # 各Google Domainsのユーザーに対して処理を実行
-    for google_domains_user in google_domains_users:
-        schedule.every(check_interval).seconds.do(check_ddns, google_domains_user)
-
+    # メインスレッドの実行を継続
     while True:
-        schedule.run_pending()
         time.sleep(1)
 
 if __name__ == "__main__":
