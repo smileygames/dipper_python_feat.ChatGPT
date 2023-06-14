@@ -58,3 +58,7 @@ ChatGPTでオブジェクト指向で実装してみる事で、勉強する用
     | + run()            |    | + run()            |
     +-------------------+    +-------------------+
 ```
+
+一応書き直してみた。
+![UML クラス](https://github.com/smileygames/dipper_python_feat.ChatGPT/assets/134200591/347411b2-ce1e-44f7-bba6-6b561d3a3b5a)
+
