@@ -4,6 +4,7 @@ import subprocess
 import time
 import threading
 
+# DDNSのベースクラスで、DDNSアドレスを更新するための共通のメソッドを提供します。
 class DDNSUpdater:
     def __init__(self, username, password, domain, use_ipv4=False, use_ipv6=False):
         self.username = username
@@ -13,12 +14,15 @@ class DDNSUpdater:
         self.use_ipv6 = use_ipv6
 
     def update_address(self, ipv4_address=None, ipv6_address=None):
+        # IPv4アドレスの更新が要求され、サブクラスが実装していない場合にはNotImplementedErrorを発生させます。
         if self.use_ipv4 and ipv4_address:
             raise NotImplementedError("Subclasses must implement update_address() method.")
 
+        # IPv6アドレスの更新が要求され、サブクラスが実装していない場合にはNotImplementedErrorを発生させます。
         if self.use_ipv6 and ipv6_address:
             raise NotImplementedError("Subclasses must implement update_address() method.")
 
+# DDNSUpdaterのサブクラスで、MyDNSのアドレスを更新するための具体的な実装を提供します。
 class MyDNSUpdater(DDNSUpdater):
     def __init__(self, username, password, ipv4_url, ipv6_url, domain, use_ipv4=False, use_ipv6=False):
         super().__init__(username, password, domain, use_ipv4, use_ipv6)
@@ -26,6 +30,7 @@ class MyDNSUpdater(DDNSUpdater):
         self.ipv6_url = ipv6_url
     
     def update_address(self, ipv4_address=None, ipv6_address=None):
+        # IPv4アドレスの使用が設定されており、かつipv4_addressが指定されている場合には、MyDNSのIPv4アドレスを更新します。
         if self.use_ipv4 and ipv4_address:
             response = requests.get(self.ipv4_url, auth=(self.username, self.password))
             if response.status_code == 200:
@@ -33,6 +38,7 @@ class MyDNSUpdater(DDNSUpdater):
             else:
                 print("Failed to update MyDNS address.")
            
+        # IPv6アドレスの使用が設定されており、かつipv6_addressが指定されている場合には、MyDNSのIPv6アドレスを更新します。
         if self.use_ipv6 and ipv6_address:
             response = requests.get(self.ipv6_url, auth=(self.username, self.password))
             if response.status_code == 200:
@@ -40,15 +46,18 @@ class MyDNSUpdater(DDNSUpdater):
             else:
                 print("Failed to update MyDNS address.")
 
+# DDNSUpdaterのサブクラスで、Google Domainsのアドレスを更新するための具体的な実装を提供します。
 class GoogleDomainsUpdater(DDNSUpdater):
     def __init__(self, username, password, url, domain, use_ipv4=False, use_ipv6=False):
         super().__init__(username, password, domain, use_ipv4, use_ipv6)
         self.url = url
   
     def update_address(self, ipv4_address=None, ipv6_address=None):
+        # IPv4アドレスの使用が設定されており、かつipv4_addressが指定されている場合には、Google DomainsのIPv4アドレスを更新します。
         if self.use_ipv4 and ipv4_address:
             url = f"{self.url}?hostname={self.domain}&myip={ipv4_address}"
             response = requests.get(url, auth=(self.username, self.password))
+        # IPv6アドレスの使用が設定されており、かつipv6_addressが指定されている場合には、Google DomainsのIPv6アドレスを更新します。
         elif self.use_ipv6 and ipv6_address:
             url = f"{self.url}?hostname={self.domain}&myip={ipv6_address}"
             response = requests.get(url, auth=(self.username, self.password))
@@ -63,6 +72,7 @@ class GoogleDomainsUpdater(DDNSUpdater):
         else:
             print("Failed to update Google Domains address.")
 
+# DDNSユーザーとドメインのマッピングを管理し、アドレスの更新とチェックを実行します。
 class DDNSManager:
     def __init__(self):
         self.mappings = {}
@@ -116,6 +126,7 @@ class DDNSManager:
         else:
             return None
 
+# DDNSManagerを定期的に呼び出してアドレスを更新するためのスレッドを提供します。
 class DDNSUpdaterThread(threading.Thread):
     def __init__(self, ddns_manager, interval_time, use_ipv4=False, use_ipv6=False):
         super().__init__()
@@ -130,6 +141,7 @@ class DDNSUpdaterThread(threading.Thread):
                 self.ddns_manager.update_ddns_address(domain)
             time.sleep(self.interval_time)
 
+# DDNSManagerを定期的に呼び出してアドレスをチェックするためのスレッドを提供します。
 class DDNSCheckerThread(threading.Thread):
     def __init__(self, ddns_manager, interval_time, use_ipv4=False, use_ipv6=False):
         super().__init__()
@@ -144,6 +156,7 @@ class DDNSCheckerThread(threading.Thread):
                 self.ddns_manager.check_ddns_address(domain)
             time.sleep(self.interval_time)
 
+# コンフィグファイルからDDNSManagerをロードするためのクラスです。
 class DDNSConfigLoader:
     @classmethod
     def load_config(cls, filename):
